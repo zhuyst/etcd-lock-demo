@@ -1,7 +1,7 @@
 version: '3'
 
 services:
-  ectd:
+  etcd:
     image: ccr.ccs.tencentyun.com/zhuyst/etcd:v3.2.25
     volumes:
       - /data/etcd:/etcd_data
