@@ -4,33 +4,40 @@ import (
 	"context"
 	"errors"
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/clientv3/concurrency"
 	"log"
+	"sync"
 	"time"
 )
 
 var etcd *clientv3.Client
+var waitGroup sync.WaitGroup
+const KEY = "/test/mylock"
 
 func main() {
 	if err := initEtcd(); err != nil {
 		return
 	}
-
-	key := "/test/hello-key"
-
-	if err := putValue(key,"hello-value"); err != nil {
-		log.Fatal("添加值失败", err)
-		return
-	}
-	log.Println("添加值成功")
-
-	value, err := getValue(key)
-	if err != nil {
-		log.Fatal("获取值失败", err)
-		return
-	}
-	log.Println(value)
-
 	defer etcd.Close()
+
+	go testLock(1, time.Second * 5)
+	go testLock(2, time.Second)
+
+	waitGroup.Add(2)
+	waitGroup.Wait()
+
+	//if err := putValue(key,"hello-value"); err != nil {
+	//	log.Fatal("添加值失败", err)
+	//	return
+	//}
+	//log.Println("添加值成功")
+	//
+	//value, err := getValue(key)
+	//if err != nil {
+	//	log.Fatal("获取值失败", err)
+	//	return
+	//}
+	//log.Println(value)
 }
 
 func initEtcd() error {
@@ -45,6 +52,39 @@ func initEtcd() error {
 
 	log.Println("etcd连接成功")
 	etcd = cli
+	return nil
+}
+
+func testLock(lockNumber int, processTime time.Duration) error {
+	defer waitGroup.Done()
+
+	ctx, cancel := context.WithTimeout(context.Background(), processTime + 5 * time.Second)
+	session, err := concurrency.NewSession(etcd, concurrency.WithContext(ctx))
+	if err != nil {
+		log.Fatal("获取Session失败")
+		return err
+	}
+
+	log.Println(lockNumber, " - 准备获取Lock")
+	mutex := concurrency.NewMutex(session, KEY)
+	if err := mutex.Lock(context.Background()); err != nil {
+		log.Fatal("获取Lock失败")
+		return err
+	}
+	log.Println(lockNumber, " - 获取Lock成功")
+
+	// 模拟处理时间
+	log.Println(lockNumber, " - 模拟处理时间 — ", processTime)
+	time.Sleep(processTime)
+	log.Println(lockNumber, " - 处理结束")
+
+	cancel()
+	if err := mutex.Unlock(context.Background()); err != nil {
+		log.Fatal(lockNumber, " - 解除Lock失败")
+		return err
+	}
+
+	log.Println(lockNumber, " - 解除Lock成功")
 	return nil
 }
 
