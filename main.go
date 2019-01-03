@@ -20,10 +20,9 @@ func main() {
 	}
 	defer etcd.Close()
 
+	waitGroup.Add(2)
 	go testLock(1, time.Second * 5)
 	go testLock(2, time.Second)
-
-	waitGroup.Add(2)
 	waitGroup.Wait()
 
 	//if err := putValue(key,"hello-value"); err != nil {
